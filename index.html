@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>AR Tata Surya Mini - UTS Augmented Reality</title>
+
+  <!-- Library: A-Frame (3D) + AR.js (marker-based tracking) -->
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
+
+  <style>
+    /* Disengaja minimal: pemosisian video/canvas 100% milik AR.js (jangan dioverride) */
+    body { margin: 0; overflow: hidden; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .ui { position: fixed; z-index: 999; color: #fff; }
+    #topbar { top: 0; left: 0; right: 0; padding: 10px 14px; background: linear-gradient(rgba(0,0,0,.65), rgba(0,0,0,0)); font-size: 13px; line-height: 1.35; pointer-events: none; }
+    #topbar b { font-size: 15px; }
+    #status { left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; background: rgba(0,0,0,.6); padding: 14px 18px; border-radius: 14px; font-size: 15px; max-width: 80vw; transition: opacity .3s; pointer-events: none; }
+    #status.hidden { opacity: 0; pointer-events: none; }
+    #controls { bottom: 18px; left: 0; right: 0; display: flex; gap: 10px; justify-content: center; padding: 0 12px; }
+    #controls button { flex: 1; max-width: 170px; padding: 12px 8px; border: 0; border-radius: 12px; font-size: 14px; font-weight: 600; color: #0b1020; background: #ffd54f; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+    #controls button:active { transform: scale(.97); }
+    #modeLabel { top: 58px; right: 14px; font-size: 12px; background: rgba(0,0,0,.5); padding: 4px 10px; border-radius: 999px; pointer-events: none; }
+    #errbox { display: none; left: 50%; top: 12%; transform: translateX(-50%); background: #7f1d1d; color: #fff; padding: 12px 16px; border-radius: 12px; font-size: 13px; max-width: 86vw; text-align: center; }
+    #dbg { left: 8px; bottom: 70px; font-size: 11px; font-family: monospace; background: rgba(0,0,0,.65); color: #a7f3d0; padding: 8px 10px; border-radius: 8px; max-width: 70vw; white-space: pre-wrap; pointer-events: none; }
+  </style>
+</head>
+
+<body>
+  <div id="topbar" class="ui">
+    <b>AR Tata Surya Mini</b><br>
+    <span id="identitas"></span>
+  </div>
+  <div id="modeLabel" class="ui">Mode: Tata Surya</div>
+  <div id="status" class="ui">Arahkan kamera ke <b>marker Hiro</b><br><small>(izinkan akses kamera)</small></div>
+  <div id="errbox" class="ui"></div>
+  <div id="dbg" class="ui">menyiapkan kamera...</div>
+  <div id="controls" class="ui">
+    <button id="btnPause">Jeda</button>
+    <button id="btnMode">Mode Grafik</button>
+  </div>
+
+  <script>
+    /* Komponen: teks selalu menghadap kamera (didaftarkan SEBELUM scene) */
+    AFRAME.registerComponent("billboard", {
+      init: function () {
+        this.camPos = new THREE.Vector3();
+        this.camEl = document.querySelector("[camera]");
+      },
+      tick: function () {
+        if (!this.camEl || !this.camEl.object3D) return;
+        this.camEl.object3D.getWorldPosition(this.camPos);
+        this.el.object3D.lookAt(this.camPos);
+      }
+    });
+
+    /* Komponen: grafik batang 3D - jarak rata-rata planet ke Matahari (AU) */
+    AFRAME.registerComponent("bar-chart", {
+      init: function () {
+        var data = [
+          { n: "Merkurius", v: 0.39, c: "#b0b0b0" },
+          { n: "Venus",     v: 0.72, c: "#e8c07a" },
+          { n: "Bumi",      v: 1.00, c: "#3b82f6" },
+          { n: "Mars",      v: 1.52, c: "#e2572b" }
+        ];
+        var scale = 0.38, gap = 0.3, x0 = -((data.length - 1) * gap) / 2;
+        var el = this.el;
+
+        var base = document.createElement("a-box");
+        base.setAttribute("position", "0 0.01 0");
+        base.setAttribute("width", "1.4");
+        base.setAttribute("height", "0.02");
+        base.setAttribute("depth", "0.5");
+        base.setAttribute("color", "#111a3a");
+        el.appendChild(base);
+
+        var title = document.createElement("a-text");
+        title.setAttribute("value", "Jarak rata-rata ke Matahari (AU)");
+        title.setAttribute("align", "center");
+        title.setAttribute("width", "1.6");
+        title.setAttribute("color", "#ffffff");
+        title.setAttribute("position", "0 0.95 0");
+        title.setAttribute("billboard", "");
+        el.appendChild(title);
+
+        data.forEach(function (d, i) {
+          var h = d.v * scale;
+          var bar = document.createElement("a-entity");
+          bar.classList.add("bar");
+          bar.setAttribute("position", (x0 + i * gap) + " 0.02 0");
+          bar.setAttribute("scale", "1 0.001 1");
+          bar.setAttribute("animation", "property: scale; from: 1 0.001 1; to: 1 1 1; dur: 1300; delay: " + (i * 250) + "; easing: easeOutElastic; startEvents: grow");
+
+          var box = document.createElement("a-box");
+          box.setAttribute("width", "0.2");
+          box.setAttribute("depth", "0.2");
+          box.setAttribute("height", h);
+          box.setAttribute("position", "0 " + (h / 2) + " 0");
+          box.setAttribute("color", d.c);
+          bar.appendChild(box);
+
+          var val = document.createElement("a-text");
+          val.setAttribute("value", d.v.toFixed(2));
+          val.setAttribute("align", "center");
+          val.setAttribute("width", "0.9");
+          val.setAttribute("color", "#fff");
+          val.setAttribute("position", "0 " + (h + 0.07) + " 0");
+          val.setAttribute("billboard", "");
+          bar.appendChild(val);
+
+          el.appendChild(bar);
+
+          var lbl = document.createElement("a-text");
+          lbl.setAttribute("value", d.n);
+          lbl.setAttribute("align", "center");
+          lbl.setAttribute("width", "0.75");
+          lbl.setAttribute("color", "#cfe3ff");
+          lbl.setAttribute("rotation", "-90 0 0");
+          lbl.setAttribute("position", (x0 + i * gap) + " 0.025 0.2");
+          el.appendChild(lbl);
+        });
+      }
+    });
+  </script>
+
+  <!-- Scene: config stock seperti tes minimal yang terbukti jalan -->
+  <a-scene
+    embedded
+    arjs="sourceType: webcam; debugUIEnabled: false;"
+    vr-mode-ui="enabled: false"
+    loading-screen="enabled: false">
+
+    <!-- ======= MARKER: Hiro (preset bawaan AR.js) ======= -->
+    <a-marker id="marker" preset="hiro" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="2">
+
+      <a-light type="ambient" color="#ffffff" intensity="0.7"></a-light>
+      <a-light type="point" color="#fff4d6" intensity="1.6" position="0 0.7 0"></a-light>
+
+      <a-cylinder position="0 0.01 0" radius="0.95" height="0.02" color="#0b1330" opacity="0.55" transparent="true"></a-cylinder>
+
+      <!-- ================= MODE 1: TATA SURYA (animasi 3D) ================= -->
+      <a-entity id="solar" position="0 0.65 0" scale="0.85 0.85 0.85">
+
+        <a-entity animation="property: scale; from: 1 1 1; to: 1.08 1.08 1.08; dir: alternate; dur: 1200; loop: true; easing: easeInOutSine">
+          <a-sphere radius="0.2" material="shader: flat; color: #ffb300"></a-sphere>
+          <a-sphere radius="0.26" material="shader: flat; color: #ff8f00; opacity: 0.25; transparent: true"></a-sphere>
+        </a-entity>
+        <a-text value="Matahari" align="center" color="#fff" width="1.2" position="0 0.36 0" billboard></a-text>
+
+        <a-torus rotation="90 0 0" radius="0.35" radius-tubular="0.003" color="#ffffff" opacity="0.25" transparent="true"></a-torus>
+        <a-torus rotation="90 0 0" radius="0.52" radius-tubular="0.003" color="#ffffff" opacity="0.25" transparent="true"></a-torus>
+        <a-torus rotation="90 0 0" radius="0.70" radius-tubular="0.003" color="#ffffff" opacity="0.25" transparent="true"></a-torus>
+        <a-torus rotation="90 0 0" radius="0.86" radius-tubular="0.003" color="#ffffff" opacity="0.25" transparent="true"></a-torus>
+
+        <a-entity animation="property: rotation; to: 0 360 0; dur: 4000; loop: true; easing: linear">
+          <a-entity position="0.35 0 0">
+            <a-sphere radius="0.035" color="#b0b0b0" animation="property: rotation; to: 0 360 0; dur: 3000; loop: true; easing: linear"></a-sphere>
+          </a-entity>
+        </a-entity>
+
+        <a-entity animation="property: rotation; to: 0 360 0; dur: 6500; loop: true; easing: linear">
+          <a-entity position="0.52 0 0">
+            <a-sphere radius="0.055" color="#e8c07a" animation="property: rotation; to: 0 -360 0; dur: 5000; loop: true; easing: linear"></a-sphere>
+          </a-entity>
+        </a-entity>
+
+        <a-entity animation="property: rotation; to: 0 360 0; dur: 9000; loop: true; easing: linear">
+          <a-entity position="0.70 0 0">
+            <a-sphere radius="0.06" color="#3b82f6" animation="property: rotation; to: 0 360 0; dur: 2500; loop: true; easing: linear"></a-sphere>
+            <a-text value="Bumi" align="center" color="#9cc7ff" width="0.7" position="0 0.13 0" billboard></a-text>
+            <a-entity animation="property: rotation; to: 0 360 0; dur: 2200; loop: true; easing: linear">
+              <a-sphere position="0.11 0 0" radius="0.018" color="#d1d5db"></a-sphere>
+            </a-entity>
+          </a-entity>
+        </a-entity>
+
+        <a-entity animation="property: rotation; to: 0 360 0; dur: 12500; loop: true; easing: linear">
+          <a-entity position="0.86 0 0">
+            <a-sphere radius="0.045" color="#e2572b" animation="property: rotation; to: 0 360 0; dur: 2800; loop: true; easing: linear"></a-sphere>
+          </a-entity>
+        </a-entity>
+      </a-entity>
+
+      <!-- ================= MODE 2: GRAFIK BATANG 3D ================= -->
+      <a-entity id="chart" position="0 0 0" visible="false" bar-chart>
+      </a-entity>
+
+    </a-marker>
+
+    <a-entity camera></a-entity>
+  </a-scene>
+
+  <script>
+    /* ======= ISI IDENTITAS ANDA DI SINI ======= */
+    var IDENTITAS = "Nama: ____________ | NIM: ____________ | Kelas A1 - UTS Augmented Reality";
+    document.getElementById("identitas").textContent = IDENTITAS;
+
+    /* ======= Kontrol UI + diagnostik (read-only, tidak menyentuh style video) ======= */
+    var solar = document.getElementById("solar");
+    var chart = document.getElementById("chart");
+    var marker = document.getElementById("marker");
+    var statusBox = document.getElementById("status");
+    var modeLabel = document.getElementById("modeLabel");
+    var btnPause = document.getElementById("btnPause");
+    var btnMode = document.getElementById("btnMode");
+    var errbox = document.getElementById("errbox");
+    var dbg = document.getElementById("dbg");
+    var paused = false, chartMode = false;
+
+    function showError(msg) {
+      errbox.style.display = "block";
+      errbox.innerHTML = msg;
+    }
+    function logDbg(t) { dbg.textContent = t; }
+
+    if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+      showError("Buka lewat <b>HTTPS atau localhost</b> agar kamera diizinkan browser.");
+    }
+
+    (function watchVideo() {
+      var tries = 0;
+      var timer = setInterval(function () {
+        tries++;
+        var v = document.querySelector("#arjs-video") || document.querySelector("body > video");
+        if (v) {
+          clearInterval(timer);
+          if (v.paused) { v.play().catch(function () {}); }
+          var badCount = 0;
+          setInterval(function () {
+            var w = v.videoWidth || 0, h = v.videoHeight || 0;
+            var track = (v.srcObject && v.srcObject.getVideoTracks()[0]) || null;
+            var tlabel = track ? track.label : "(no track)";
+            var tstate = track ? track.readyState : "-";
+            if (track && tstate === "ended") {
+              showError("<b>Kamera terputus</b> (direbut app/tab lain). Tutup semuanya, sisakan satu tab ini, lalu:<br><button onclick='location.reload()' style='margin-top:8px;padding:8px 14px;border:0;border-radius:8px;font-weight:700'>Reload</button>");
+              logDbg("TRACK ENDED: " + tlabel);
+              return;
+            }
+            if (track && tstate === "live" && v.paused && w > 0) {
+              v.play().catch(function () {});
+            }
+            if (w > 0 && !v.paused) {
+              badCount = 0;
+              errbox.style.display = "none";
+              logDbg("kamera OK: " + w + "x" + h + " | " + tlabel + "\nArahkan ke marker Hiro.");
+            } else {
+              badCount++;
+              logDbg("video: " + w + "x" + h + " readyState=" + v.readyState + (v.paused ? " PAUSED" : " PLAYING") + "\ntrack: " + tlabel + " [" + tstate + "]");
+              if (badCount >= 10) {
+                showError("<b>Video ketemu tapi gambar hitam.</b> Pastikan hanya SATU tab yang memakai kamera, tutup Zoom/Teams/Discord/OBS, lalu:<br><button onclick='location.reload()' style='margin-top:8px;padding:8px 14px;border:0;border-radius:8px;font-weight:700'>Reload</button>");
+              }
+            }
+          }, 1000);
+          document.addEventListener("visibilitychange", function () {
+            if (!document.hidden && v.paused) { v.play().catch(function () {}); }
+          });
+        } else if (tries > 100) {
+          clearInterval(timer);
+          showError("Elemen video AR.js tidak muncul (&gt;10 dtk). Izinkan kamera lalu reload.<br><button onclick='location.reload()' style='margin-top:8px;padding:8px 14px;border:0;border-radius:8px;font-weight:700'>Reload</button>");
+        } else {
+          logDbg("menunggu elemen video AR.js... (" + tries + "/100)");
+        }
+      }, 100);
+    })();
+
+    marker.addEventListener("markerFound", function () { statusBox.classList.add("hidden"); });
+    marker.addEventListener("markerLost", function () { statusBox.classList.remove("hidden"); });
+
+    btnPause.addEventListener("click", function () {
+      paused = !paused;
+      if (paused) { solar.pause(); } else { solar.play(); }
+      btnPause.textContent = paused ? "Putar" : "Jeda";
+    });
+
+    btnMode.addEventListener("click", function () {
+      chartMode = !chartMode;
+      solar.setAttribute("visible", !chartMode);
+      chart.setAttribute("visible", chartMode);
+      modeLabel.textContent = chartMode ? "Mode: Grafik 3D" : "Mode: Tata Surya";
+      btnMode.textContent = chartMode ? "Mode Tata Surya" : "Mode Grafik";
+      if (chartMode) {
+        chart.querySelectorAll(".bar").forEach(function (b) { b.emit("grow"); });
+      }
+    });
+  </script>
+</body>
+</html>
